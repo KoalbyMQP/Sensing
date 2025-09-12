@@ -4,9 +4,9 @@ import cv2
 # Create pipeline
 pipeline = dai.Pipeline()
 
-# Define source and output
+# Define source and output - using ColorCamera and SPIOut (DepthAI 3.0 API)
 camRgb = pipeline.create(dai.node.ColorCamera)
-xoutRgb = pipeline.create(dai.node.XLinkOut)
+xoutRgb = pipeline.create(dai.node.SPIOut)
 
 # Set properties
 camRgb.setPreviewSize(640, 480)
@@ -18,7 +18,8 @@ camRgb.preview.link(xoutRgb.input)
 xoutRgb.setStreamName("rgb")
 
 # Connect to device and start pipeline
-with dai.Device(pipeline) as device:
+with dai.Device() as device:
+    device.startPipeline(pipeline)
     # Get output queue
     qRgb = device.getOutputQueue(name="rgb", maxSize=4, blocking=False)
     
