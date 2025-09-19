@@ -7,7 +7,6 @@ Computer vision capabilities using OAK-D DepthAI camera.
 Vision/
 ├── core/           # Core vision functionality and base classes
 ├── modules/        # Vision applications (Chess, etc.)
-├── tests/          # Test scripts and validation code
 └── README.md       # This file
 ```
 
