@@ -1,0 +1,2 @@
+model: yolov6-nano
+platform: RVC2
