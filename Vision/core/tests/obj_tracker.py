@@ -1,101 +1,100 @@
-# https://mediapipe.readthedocs.io/en/latest/solutions/face_mesh.html
+#!/usr/bin/env python3
+
 import cv2
-import mediapipe as mp
-mp_drawing = mp.solutions.drawing_utils
-mp_drawing_styles = mp.solutions.drawing_styles
-mp_face_mesh = mp.solutions.face_mesh
+import depthai as dai
+import time
 
-# For static images:
-IMAGE_FILES = []
-drawing_spec = mp_drawing.DrawingSpec(thickness=1, circle_radius=1)
-with mp_face_mesh.FaceMesh(
-    static_image_mode=True,
-    max_num_faces=1,
-    refine_landmarks=True,
-    min_detection_confidence=0.5) as face_mesh:
-  for idx, file in enumerate(IMAGE_FILES):
-    image = cv2.imread(file)
-    # Convert the BGR image to RGB before processing.
-    results = face_mesh.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
 
-    # Print and draw face mesh landmarks on the image.
-    if not results.multi_face_landmarks:
-      continue
-    annotated_image = image.copy()
-    for face_landmarks in results.multi_face_landmarks:
-      print('face_landmarks:', face_landmarks)
-      mp_drawing.draw_landmarks(
-          image=annotated_image,
-          landmark_list=face_landmarks,
-          connections=mp_face_mesh.FACEMESH_TESSELATION,
-          landmark_drawing_spec=None,
-          connection_drawing_spec=mp_drawing_styles
-          .get_default_face_mesh_tesselation_style())
-      mp_drawing.draw_landmarks(
-          image=annotated_image,
-          landmark_list=face_landmarks,
-          connections=mp_face_mesh.FACEMESH_CONTOURS,
-          landmark_drawing_spec=None,
-          connection_drawing_spec=mp_drawing_styles
-          .get_default_face_mesh_contours_style())
-      mp_drawing.draw_landmarks(
-          image=annotated_image,
-          landmark_list=face_landmarks,
-          connections=mp_face_mesh.FACEMESH_IRISES,
-          landmark_drawing_spec=None,
-          connection_drawing_spec=mp_drawing_styles
-          .get_default_face_mesh_iris_connections_style())
-    cv2.imwrite('/tmp/annotated_image' + str(idx) + '.png', annotated_image)
+fullFrameTracking = False
 
-# For webcam input:
-drawing_spec = mp_drawing.DrawingSpec(thickness=1, circle_radius=1)
-cap = cv2.VideoCapture(0)
-with mp_face_mesh.FaceMesh(
-    max_num_faces=1,
-    refine_landmarks=True,
-    min_detection_confidence=0.5,
-    min_tracking_confidence=0.5) as face_mesh:
-  while cap.isOpened():
-    success, image = cap.read()
-    if not success:
-      print("Ignoring empty camera frame.")
-      # If loading a video, use 'break' instead of 'continue'.
-      continue
+# Create pipeline
+with dai.Pipeline() as pipeline:
+    # Define sources and outputs
+    camRgb = pipeline.create(dai.node.Camera).build(dai.CameraBoardSocket.CAM_A) # middle camera
+    monoLeft = pipeline.create(dai.node.Camera).build(dai.CameraBoardSocket.CAM_B) # left infrared camera
+    monoRight = pipeline.create(dai.node.Camera).build(dai.CameraBoardSocket.CAM_C) # right infrared camera
 
-    # To improve performance, optionally mark the image as not writeable to
-    # pass by reference.
-    image.flags.writeable = False
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    results = face_mesh.process(image)
+    # Spatial depth calculation
+    stereo = pipeline.create(dai.node.StereoDepth)
+    leftOutput = monoLeft.requestOutput((640, 400))
+    rightOutput = monoRight.requestOutput((640, 400))
+    leftOutput.link(stereo.left)
+    rightOutput.link(stereo.right)
 
-    # Draw the face mesh annotations on the image.
-    image.flags.writeable = True
-    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-    if results.multi_face_landmarks:
-      for face_landmarks in results.multi_face_landmarks:
-        mp_drawing.draw_landmarks(
-            image=image,
-            landmark_list=face_landmarks,
-            connections=mp_face_mesh.FACEMESH_TESSELATION,
-            landmark_drawing_spec=None,
-            connection_drawing_spec=mp_drawing_styles
-            .get_default_face_mesh_tesselation_style())
-        mp_drawing.draw_landmarks(
-            image=image,
-            landmark_list=face_landmarks,
-            connections=mp_face_mesh.FACEMESH_CONTOURS,
-            landmark_drawing_spec=None,
-            connection_drawing_spec=mp_drawing_styles
-            .get_default_face_mesh_contours_style())
-        mp_drawing.draw_landmarks(
-            image=image,
-            landmark_list=face_landmarks,
-            connections=mp_face_mesh.FACEMESH_IRISES,
-            landmark_drawing_spec=None,
-            connection_drawing_spec=mp_drawing_styles
-            .get_default_face_mesh_iris_connections_style())
-    # Flip the image horizontally for a selfie-view display.
-    cv2.imshow('MediaPipe Face Mesh', cv2.flip(image, 1))
-    if cv2.waitKey(5) & 0xFF == 27:
-      break
-cap.release()
+    spatialDetectionNetwork = pipeline.create(dai.node.SpatialDetectionNetwork).build(camRgb, stereo, "yolov6-nano")
+    objectTracker = pipeline.create(dai.node.ObjectTracker)
+
+    spatialDetectionNetwork.setConfidenceThreshold(0.6)
+    spatialDetectionNetwork.input.setBlocking(False)
+    spatialDetectionNetwork.setBoundingBoxScaleFactor(0.5)
+    spatialDetectionNetwork.setDepthLowerThreshold(100)
+    spatialDetectionNetwork.setDepthUpperThreshold(5000)
+    labelMap = spatialDetectionNetwork.getClasses()
+
+    objectTracker.setDetectionLabelsToTrack([0])  # track only person
+    # possible tracking types: ZERO_TERM_COLOR_HISTOGRAM, ZERO_TERM_IMAGELESS, SHORT_TERM_IMAGELESS, SHORT_TERM_KCF
+    objectTracker.setTrackerType(dai.TrackerType.SHORT_TERM_IMAGELESS)
+    # take the smallest ID when new object is tracked, possible options: SMALLEST_ID, UNIQUE_ID
+    objectTracker.setTrackerIdAssignmentPolicy(dai.TrackerIdAssignmentPolicy.SMALLEST_ID)
+
+    preview = objectTracker.passthroughTrackerFrame.createOutputQueue()
+    tracklets = objectTracker.out.createOutputQueue()
+
+    if fullFrameTracking:
+        camRgb.requestFullResolutionOutput().link(objectTracker.inputTrackerFrame)
+        # do not block the pipeline if it's too slow on full frame
+        objectTracker.inputTrackerFrame.setBlocking(False)
+        objectTracker.inputTrackerFrame.setMaxSize(1)
+    else:
+        spatialDetectionNetwork.passthrough.link(objectTracker.inputTrackerFrame)
+
+    spatialDetectionNetwork.passthrough.link(objectTracker.inputDetectionFrame)
+    spatialDetectionNetwork.out.link(objectTracker.inputDetections)
+
+    startTime = time.monotonic()
+    counter = 0
+    fps = 0
+    color = (255, 255, 255)
+    pipeline.start()
+    while(pipeline.isRunning()):
+        imgFrame = preview.get()
+        track = tracklets.get()
+        assert isinstance(imgFrame, dai.ImgFrame), "Expected ImgFrame"
+        assert isinstance(track, dai.Tracklets), "Expected Tracklets"
+
+        counter+=1
+        current_time = time.monotonic()
+        if (current_time - startTime) > 1 :
+            fps = counter / (current_time - startTime)
+            counter = 0
+            startTime = current_time
+
+        frame = imgFrame.getCvFrame()
+        trackletsData = track.tracklets
+        for t in trackletsData:
+            roi = t.roi.denormalize(frame.shape[1], frame.shape[0])
+            x1 = int(roi.topLeft().x)
+            y1 = int(roi.topLeft().y)
+            x2 = int(roi.bottomRight().x)
+            y2 = int(roi.bottomRight().y)
+
+            try:
+                label = labelMap[t.label]
+            except:
+                label = t.label
+
+            cv2.putText(frame, str(label), (x1 + 10, y1 + 20), cv2.FONT_HERSHEY_TRIPLEX, 0.5, 255)
+            cv2.putText(frame, f"ID: {[t.id]}", (x1 + 10, y1 + 35), cv2.FONT_HERSHEY_TRIPLEX, 0.5, 255)
+            cv2.putText(frame, t.status.name, (x1 + 10, y1 + 50), cv2.FONT_HERSHEY_TRIPLEX, 0.5, 255)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, cv2.FONT_HERSHEY_SIMPLEX)
+
+            cv2.putText(frame, f"X: {int(t.spatialCoordinates.x)} mm", (x1 + 10, y1 + 65), cv2.FONT_HERSHEY_TRIPLEX, 0.5, 255)
+            cv2.putText(frame, f"Y: {int(t.spatialCoordinates.y)} mm", (x1 + 10, y1 + 80), cv2.FONT_HERSHEY_TRIPLEX, 0.5, 255)
+            cv2.putText(frame, f"Z: {int(t.spatialCoordinates.z)} mm", (x1 + 10, y1 + 95), cv2.FONT_HERSHEY_TRIPLEX, 0.5, 255)
+
+        cv2.putText(frame, "NN fps: {:.2f}".format(fps), (2, frame.shape[0] - 4), cv2.FONT_HERSHEY_TRIPLEX, 0.4, color)
+
+        cv2.imshow("tracker", frame)
+
+        if cv2.waitKey(1) == ord('q'):
+            break
