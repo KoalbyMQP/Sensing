@@ -1,7 +1,9 @@
+# https://mediapipe.readthedocs.io/en/latest/solutions/face_mesh.html
+# https://docs.luxonis.com/software-v3/depthai/examples/image_align/depth_align
+# https://docs.luxonis.com/software-v3/depthai/examples/spatial_location_calculator/spatial_location_calculator/
 """
-Generated with the help of GPT-4.1 from face_mesh.py and obj_tracker.py
+Scaffolding generated with minimal input from GPT-4.1 from face_mesh.py and obj_tracker.py (see `conversation.md`)
 """
-# Dependencies (see install requirements and README)
 import cv2 # from OpenCV Python lib
 import depthai as dai # Luxonis DepthAI v3.0.0 -- TODO: migrate to Depthai ROS when possible
 import mediapipe as mp # MediaPipe v0.10.21
@@ -9,96 +11,189 @@ mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
 mp_face_mesh = mp.solutions.face_mesh
 
-# Instantiate pipeline from DepthAI
+colour = (255, 255, 255)
+
+# Create pipeline
 pipeline = dai.Pipeline()
 
-# Setup RGB camera interface
-cam_rgb = pipeline.create(dai.node.Camera).build(dai.CameraBoardSocket.CAM_A)
-rgb_output = cam_rgb.requestOutput((640, 480))
-rgb_queue = rgb_output.createOutputQueue()
+# Define sources and outputs
+rgb_in = pipeline.create(dai.node.Camera).build(dai.CameraBoardSocket.CAM_A) # RGB camera
+left_in = pipeline.create(dai.node.Camera).build(dai.CameraBoardSocket.CAM_B) # left IR camera
+right_in = pipeline.create(dai.node.Camera).build(dai.CameraBoardSocket.CAM_C) # right IR camera
 
-# Setup infrared cameras interface
-mono_left = pipeline.create(dai.node.Camera).build(dai.CameraBoardSocket.CAM_B)
-mono_right = pipeline.create(dai.node.Camera).build(dai.CameraBoardSocket.CAM_C)
-left_output = mono_left.requestOutput((640, 400))
-right_output = mono_right.requestOutput((640, 400))
-left_queue = left_output.createOutputQueue()
-right_queue = right_output.createOutputQueue()
-# Calculate depth from IR camera inputs
-stereo = pipeline.create(dai.node.StereoDepth)
-left_output.link(stereo.left)
-right_output.link(stereo.right)
-depth_output = stereo.depth # FIXME: derive depth calculation from SpatialDetectionNetwork and ObjectTracker device nodes
-depth_queue = depth_output.createOutputQueue()
+# Nodes
+stereo = pipeline.create(dai.node.StereoDepth) # for linking depth
+spatial = pipeline.create(dai.node.SpatialLocationCalculator) # for spatial calculations
+sync = pipeline.create(dai.node.Sync) # for colour camera
+# Inputs
+rgb_out = rgb_in.requestOutput((1280, 720), enableUndistortion=True)
+left_out = left_in.requestOutput((640, 480))
+right_out = right_in.requestOutput((640, 480))
+# Linking
+rgb_out.link(sync.inputs['RGB'])
+left_out.link(stereo.left)
+right_out.link(stereo.right)
 
-# Start pipeline
+stereo.setRectification(True)
+stereo.setExtendedDisparity(True)
+
+config = dai.SpatialLocationCalculatorConfigData()
+config.calculationAlgorithm = dai.SpatialLocationCalculatorAlgorithm.MODE
+config.depthThresholds.lowerThreshold = 10
+config.depthThresholds.upperThreshold = 10000
+config.roi = dai.Rect(0,0,0,0) # define region of interest (ROI) for spatio-depth calculations
+
+spatial.inputConfig.setWaitForMessage(False)
+spatial.initialConfig.addROI(config)
+
+spatial_queue = spatial.out.createOutputQueue()
+depth_queue = spatial.passthroughDepth.createOutputQueue()
+rgb_queue = sync.out.createOutputQueue()
+
+stereo.depth.link(spatial.inputDepth)
+rgb_out.link(stereo.inputAlignTo)
+
+inputConfigQueue = spatial.inputConfig.createInputQueue()
+
+stereo.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.ROBOTICS)
+
+mouse_coords=[0,0];old_mouse_coords=mouse_coords[:]
+def mouse_callback(event,x,y,flags,param):mouse_coords[0]=x;mouse_coords[1]=y
+windowName = "OAK-D Lite Face Mesh"
+depthWeight = 0
+colourWeight = 1
+show_face_mesh = True
+filepath = 'face_mesh_GPT.png'
+
 with pipeline:
-  pipeline.start()
-  drawing_spec = mp_drawing.DrawingSpec(thickness=1, circle_radius=1)
-  with mp_face_mesh.FaceMesh(
-    max_num_faces=10, # can only recognize up to 10 human faces at a time
-    refine_landmarks=True,
-    min_detection_confidence=0.5, # may lead to false positives (artifacts) if max_num_faces > 1
-    min_tracking_confidence=0.5) as face_mesh:
-    while pipeline.isRunning():
-      in_rgb = rgb_queue.get()
-      in_depth = depth_queue.get()
-      frame = cv2.flip(in_rgb.getCvFrame(), 1)
-      depth_frame = in_depth.getFrame() # 16-bit depth map
-      # Resize depth frame to match RGB frame size
-      depth_frame_resized = cv2.resize(depth_frame, (frame.shape[1], frame.shape[0]), interpolation=cv2.INTER_NEAREST)
+    pipeline.start()
+    cv2.namedWindow(windowName, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(windowName, 1280, 720)
+    drawing_spec = mp_drawing.DrawingSpec(thickness=1, circle_radius=1)
+    with mp_face_mesh.FaceMesh(
+        max_num_faces=10, # can only recognize up to 10 human faces at a time
+        refine_landmarks=True,
+        min_detection_confidence=0.5, # may lead to false positives (artifacts) if max_num_faces > 1
+        min_tracking_confidence=0.5
+    ) as face_mesh:
+        while pipeline.isRunning():
+            spatial_data = spatial_queue.get().getSpatialLocations()
 
-      # RGB input to MediaPipe
-      rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-      results = face_mesh.process(rgb_frame)
+            rgb_data = rgb_queue.get()
+            rgb_frame = rgb_data['RGB']
 
-      # Create face mesh
-      frame_out = frame.copy()
-      if results.multi_face_landmarks:
-        # Key landmark indices and labels
-        landmark_labels = {
-          1: "Nose Tip",
-          33: "Left Eye",
-          263: "Right Eye",
-          61: "Mouth"
-        }
-        for face_landmarks in results.multi_face_landmarks:
-          mp_drawing.draw_landmarks(
-            image=frame_out,
-            landmark_list=face_landmarks,
-            connections=mp_face_mesh.FACEMESH_TESSELATION,
-            landmark_drawing_spec=None,
-            connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_tesselation_style())
-          mp_drawing.draw_landmarks(
-            image=frame_out,
-            landmark_list=face_landmarks,
-            connections=mp_face_mesh.FACEMESH_CONTOURS,
-            landmark_drawing_spec=None,
-            connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_contours_style())
-          mp_drawing.draw_landmarks(
-            image=frame_out,
-            landmark_list=face_landmarks,
-            connections=mp_face_mesh.FACEMESH_IRISES,
-            landmark_drawing_spec=None,
-            connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_iris_connections_style())
+            outputDepthImage : dai.ImgFrame = depth_queue.get()
 
-          # Get coordinates of landmarks
-          h, w, _ = frame.shape
-          face_3d_landmarks = []
-          for idx, lm in enumerate(face_landmarks.landmark):
-            x_px = int(lm.x * w)
-            y_px = int(lm.y * h)
-            depth_mm = depth_frame_resized[y_px, x_px] if 0 <= x_px < w and 0 <= y_px < h else 0
-            face_3d_landmarks.append((x_px, y_px, depth_mm))
-            # Draw label if key landmark
-            if idx in landmark_labels:
-              label = f"{landmark_labels[idx]}"
-              # cv2.putText(frame_out, label, (x_px, y_px-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 2) # eye labels are incorrect due to frame flip
-              cv2.putText(frame_out, f"x: {x_px} mm", (x_px, y_px-10), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0,255,0), 1)
-              cv2.putText(frame_out, f"y: {y_px} mm", (x_px, y_px), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0,255,0), 1)
-              # cv2.putText(frame_out, f"z: {depth_mm} mm", (x_px, y_px+10), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0,255,0), 1) # depth_frame is often a singular matrix populated primarily with zeroes
+            frameDepth = outputDepthImage.getFrame() # getCvFrame is technically slower but handles overhead
+            cvFrame = rgb_frame.getCvFrame()
 
-      cv2.imshow('OAK-D Lite Face Mesh', frame_out)
-      if cv2.waitKey(1) & 0xFF in (ord('q'),27): # press 'q' or 'ESC' to exit window
-        break
-  cv2.destroyAllWindows()
+            depthFrameColor = cv2.normalize(frameDepth, None, 255, 0, cv2.NORM_INF, cv2.CV_8UC1)
+            depthFrameColor = cv2.equalizeHist(depthFrameColor)
+            depthFrameColor = cv2.applyColorMap(-depthFrameColor, cv2.COLORMAP_INFERNO)
+
+            blended = cv2.addWeighted(
+                cvFrame, colourWeight, depthFrameColor, depthWeight, 0
+            )
+            h, w, _ = cvFrame.shape
+
+            if len(spatial_data):
+                depth_data_cursor = spatial_data[0] # first ROI is guaranteed to be that of the cursor
+                roi = depth_data_cursor.config.roi
+                xmin = int(roi.topLeft().x)
+                ymin = int(roi.topLeft().y)
+                xmax = int(roi.bottomRight().x)
+                ymax = int(roi.bottomRight().y)
+
+                fontType = cv2.FONT_HERSHEY_SIMPLEX
+                cv2.rectangle(blended, (xmin, ymin), (xmax, ymax), colour, 1)
+                cv2.putText(blended, f"x: {int(depth_data_cursor.spatialCoordinates.x)} mm", (xmin + 10, ymin + 20), fontType, 0.3, colour, 1)
+                cv2.putText(blended, f"y: {int(depth_data_cursor.spatialCoordinates.y)} mm", (xmin + 10, ymin + 35), fontType, 0.3, colour, 1)
+                cv2.putText(blended, f"z: {int(depth_data_cursor.spatialCoordinates.z)} mm", (xmin + 10, ymin + 50), fontType, 0.3, colour, 1)
+
+            results = face_mesh.process(cv2.cvtColor(cvFrame, cv2.COLOR_BGR2RGB))
+            # frame_out = blended.copy() # using `blended` from this point onwards may be reckless
+            if (results.multi_face_landmarks!=None) & show_face_mesh:
+                # Key landmark indices and labels
+                landmark_labels = {
+                1: "Nose Tip",
+                33: "Left Eye",
+                263: "Right Eye",
+                61: "Mouth",
+                151: "Forehead"
+                }
+                forehead_labels = {
+                    i:"Forehead" for i in [162,71,63,105,66,107,109,67,103,54,21,108,69,104,68,389,301,293,334,296,336,9,151,10,338,297,332,284,251,337,299,333,298]
+                }
+                configs = [config]
+                landmarks_list = []
+                for face_landmarks in results.multi_face_landmarks:
+                    mp_drawing.draw_landmarks(
+                        image=blended,
+                        landmark_list=face_landmarks,
+                        connections=mp_face_mesh.FACEMESH_TESSELATION,
+                        landmark_drawing_spec=None,
+                        connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_tesselation_style())
+                    mp_drawing.draw_landmarks(
+                        image=blended,
+                        landmark_list=face_landmarks,
+                        connections=mp_face_mesh.FACEMESH_CONTOURS,
+                        landmark_drawing_spec=None,
+                        connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_contours_style())
+                    mp_drawing.draw_landmarks(
+                        image=blended,
+                        landmark_list=face_landmarks,
+                        connections=mp_face_mesh.FACEMESH_IRISES,
+                        landmark_drawing_spec=None,
+                        connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_iris_connections_style())
+
+                    # Get coordinates of landmarks
+                    for idx, lm in enumerate(face_landmarks.landmark):
+                        if idx in landmark_labels:
+                            config_lm = dai.SpatialLocationCalculatorConfigData()
+                            config_lm.depthThresholds.lowerThreshold = config.depthThresholds.lowerThreshold
+                            config_lm.depthThresholds.upperThreshold = config.depthThresholds.upperThreshold
+                            config_lm.roi = dai.Rect(int(w*lm.x),int(h*lm.y),2,2)
+                            configs.append(config_lm)
+                            landmarks_list.append([idx, lm])
+                        # Draw forehead dots
+                        if idx in forehead_labels:
+                            cv2.circle(blended, (int(w*lm.x), int(h*lm.y)), 2, (255, 0, 0), -1)
+                
+                if len(configs):
+                    cfg = dai.SpatialLocationCalculatorConfig()
+                    cfg.setROIs(configs)
+                    inputConfigQueue.send(cfg)
+                j=0
+                for depth_data in spatial_data:
+                    if j:
+                        x_px = round(w*landmarks_list[j-1][1].x)
+                        y_px = round(h*landmarks_list[j-1][1].y)
+                        cv2.putText(blended, f"{landmark_labels[landmarks_list[j-1][0]]}", (x_px, y_px-15), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0,255,0), 1)
+                        cv2.putText(blended, f"x: {int(depth_data.spatialCoordinates.x)} mm", (x_px, y_px-5), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0,255,0), 1)
+                        cv2.putText(blended, f"y: {int(depth_data.spatialCoordinates.y)} mm", (x_px, y_px+5), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0,255,0), 1)
+                        cv2.putText(blended, f"z: {int(depth_data.spatialCoordinates.z)} mm", (x_px, y_px+15), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0,255,0), 1)
+                    j+=1
+
+            # Show the frame
+            cv2.imshow(windowName, blended)
+            cv2.setMouseCallback(windowName, mouse_callback)
+            if old_mouse_coords != mouse_coords:
+                old_mouse_coords = mouse_coords[:]
+                config.roi = dai.Rect(mouse_coords[0],mouse_coords[1],2,2)
+                cfg = dai.SpatialLocationCalculatorConfig()
+                cfg.addROI(config)
+                inputConfigQueue.send(cfg)
+            
+            key = cv2.waitKey(1)
+            if key & 0xFF == ord('1'): # press '1' to switch to depth view
+                depthWeight=1;colourWeight=0
+            elif key & 0xFF == ord('2'): # press '2' to switch to combined view
+                depthWeight=0.5;colourWeight=0.5
+            elif key & 0xFF == ord('3'): # press '3' to switch to colour view
+                depthWeight=0;colourWeight=1
+            elif key & 0xFF == ord('m'): # press 'M' to toggle face mesh
+                show_face_mesh = False if show_face_mesh else True
+            elif key & 0xFF == ord('s'): # press 'S' to save screenshot
+                cv2.imwrite(filepath, blended)
+            elif key & 0xFF in (ord('q'),27): # press 'Q' or 'ESC' to exit window
+                break
