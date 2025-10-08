@@ -158,7 +158,7 @@ with pipeline:
                         # Draw forehead dots
                         if idx in forehead_labels:
                             cv2.circle(blended, (int(w*lm.x), int(h*lm.y)), 2, (255, 0, 0), -1)
-                
+
                 if len(configs):
                     cfg = dai.SpatialLocationCalculatorConfig()
                     cfg.setROIs(configs)
@@ -183,7 +183,7 @@ with pipeline:
                 cfg = dai.SpatialLocationCalculatorConfig()
                 cfg.addROI(config)
                 inputConfigQueue.send(cfg)
-            
+
             key = cv2.waitKey(1)
             if key & 0xFF == ord('1'): # press '1' to switch to depth view
                 depthWeight=1;colourWeight=0

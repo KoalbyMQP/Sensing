@@ -1,3 +1,5 @@
 opencv-python==4.10.0.82
 depthai==3.0.0
 mediapipe==0.10.21 # compatible only with Python 3.8 to Python 3.12
+rolint==0.1.11 # as of 2025-10-08
+pre-commit==4.3.0 # as of 2025-10-08

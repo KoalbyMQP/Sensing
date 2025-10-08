@@ -33,21 +33,21 @@ cam_rgb.preview.link(xout_rgb.input)
 with dai.Device(pipeline) as device:
     q_rgb = device.getOutputQueue(name="rgb", maxSize=4, blocking=False)
     mp_face_mesh = mp.solutions.face_mesh.FaceMesh(static_image_mode=False, max_num_faces=1)
-    
+
     while True:
         in_rgb = q_rgb.get()
         frame = in_rgb.getCvFrame()
-        
+
         # Convert to RGB for MediaPipe
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = mp_face_mesh.process(rgb_frame)
-        
+
         # Draw face mesh
         if results.multi_face_landmarks:
             for face_landmarks in results.multi_face_landmarks:
                 mp.solutions.drawing_utils.draw_landmarks(
                     frame, face_landmarks, mp.solutions.face_mesh.FACEMESH_TESSELATION)
-        
+
         cv2.imshow("Face Mesh", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
@@ -74,7 +74,7 @@ DepthAI provides the camera frames, MediaPipe processes them for face mesh, and 
   2. Use DepthAI’s depth map to get the depth value at each landmark’s pixel location.
   3. Combine the 2D facial landmarks with their corresponding depth values to get 3D coordinates.
 
-*Summary:* 
+*Summary:*
 You cannot run MediaPipe Face Mesh directly on IR images, but you can use the IR-based depth map from OAK-D Lite to augment the 2D face mesh with depth information, effectively creating a 3D face mesh.
 
 Would you like a code example for this workflow?"
@@ -146,7 +146,7 @@ This will:
 - Define a dictionary mapping landmark indices to region names.
 - Overlay text labels at those landmark positions using `cv2.putText()`.
 
-Let me add this for you. 
+Let me add this for you.
 
 `face_mesh_GPT.py`
 
@@ -164,7 +164,7 @@ No syntax or lint errors were found in `face_mesh_GPT.py`. If you encountered a 
 
 **GitHub Copilot:** "You're correct—DepthAI's Python API uses `pipeline.create(dai.node.ColorCamera)` and similar node creation patterns, not `createColorCamera`. The current code uses outdated or incorrect DepthAI API calls.
 
-I'll update `face_mesh_GPT.py` to use the correct DepthAI node creation methods and linkages for RGB and stereo depth streams. 
+I'll update `face_mesh_GPT.py` to use the correct DepthAI node creation methods and linkages for RGB and stereo depth streams.
 
 `face_mesh_GPT.py`
 
@@ -192,7 +192,7 @@ RuntimeError: Always call output->createOutputQueue() or output->link(*) after c
 
 **GitHub Copilot:** "This error means that after calling `requestOutput()` on a DepthAI camera node, you must create an output queue for it (using `.createOutputQueue()`) or link it to another node. The current code is missing this step.
 
-I'll fix `face_mesh_GPT.py` to properly create output queues for the RGB and depth outputs, following the correct DepthAI API usage. 
+I'll fix `face_mesh_GPT.py` to properly create output queues for the RGB and depth outputs, following the correct DepthAI API usage.
 
 `face_mesh_GPT.py`
 
@@ -215,7 +215,7 @@ IndexError: index 477 is out of bounds for axis 0 with size 400"
 *Solution:*
 You need to resize the depth frame to match the RGB frame size before accessing pixel values.
 
-I'll update your code to resize the depth frame using OpenCV before mapping the depth values. 
+I'll update your code to resize the depth frame using OpenCV before mapping the depth values.
 
 `face_mesh_GPT.py`
 

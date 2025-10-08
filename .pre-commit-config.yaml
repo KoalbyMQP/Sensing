@@ -1,0 +1,19 @@
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0 # as of 2025-10-08
+    hooks:
+    -   id: check-yaml
+    -   id: end-of-file-fixer
+    -   id: trailing-whitespace
+
+-   repo: https://github.com/KoalbyMQP/rolint-pre-commit
+    rev: 0.1.11 # as of 2025-10-08
+    hooks:
+    -   id: rolint
+        args: [--lang, python] # to be removed if C++ files are added
+        # types: [python] # problem interpreting and resolving non-existent left-point magnifying glass at the start of files
+# Optional, for automatic reformatting
+# -   repo: https://github.com/psf/black
+#     rev: 25.9.0
+#     hooks:
+#     -   id: black
