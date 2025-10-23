@@ -32,6 +32,7 @@ def convert_to_depthai(pytorch_model_path, model_name, output_dir):
     
     # Export to ONNX
     onnx_path = model_dir / f"{model_name}.onnx"
+    #TODO: Change size of export to image size.
     model.export(format="onnx", imgsz=640)
     
     # Move ONNX file to model directory
