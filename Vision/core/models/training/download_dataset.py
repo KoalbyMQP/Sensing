@@ -31,9 +31,9 @@ def download_dataset(api_key, workspace, project, version):
 if __name__ == "__main__":
     # Replace with your actual values
     dataset_path = download_dataset(
-        api_key="YOUR_API_KEY_HERE",
+        api_key="Y0G66vmOV2YEL42JtXAX",
         workspace="coin-counter-sskgh", 
         project="chess-bjirs",
-        version=3
+        version=5
     )
     print(f"\nDataset path: {dataset_path}")
