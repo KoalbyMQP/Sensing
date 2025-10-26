@@ -34,6 +34,6 @@ if __name__ == "__main__":
         api_key="Y0G66vmOV2YEL42JtXAX",
         workspace="coin-counter-sskgh", 
         project="chess-bjirs",
-        version=5
+        version=6
     )
     print(f"\nDataset path: {dataset_path}")
