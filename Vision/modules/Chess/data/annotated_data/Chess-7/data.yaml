@@ -1,0 +1,25 @@
+names:
+- black-bishop
+- black-king
+- black-knight
+- black-pawn
+- black-queen
+- black-rook
+- white queen
+- white rook
+- white-bishop
+- white-king
+- white-knight
+- white-pawn
+- white-queen
+- white-rook
+nc: 14
+roboflow:
+  license: CC BY 4.0
+  project: chess-bjirs
+  url: https://universe.roboflow.com/coin-counter-sskgh/chess-bjirs/dataset/7
+  version: 7
+  workspace: coin-counter-sskgh
+test: ../test/images
+train: ../train/images
+val: ../valid/images
