@@ -1,0 +1,31 @@
+import cv2
+import os
+from pathlib import Path
+
+# File location and resize size
+INPUT_FOLDER = str(Path.home() / "Downloads" / "chess_images")
+OUTPUT_FOLDER = str(Path.home() / "Downloads" / "chess_images_resized")
+RESIZE_WIDTH = 640
+RESIZE_HEIGHT = 640
+
+os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+
+# Get all image files from the folder - regex for jpg/png file extensions
+image_paths = list(Path(INPUT_FOLDER).glob("*.[pjPJ][pnPNgG]*"))
+
+if not image_paths:
+    print(f"No images found in '{INPUT_FOLDER}'.")
+else:
+    for img_path in image_paths:
+        print(f"Processing: {img_path.name}")
+        img = cv2.imread(str(img_path))
+        if img is None:
+            print(f"Could not read {img_path}")
+            continue
+
+        resized = cv2.resize(img, (RESIZE_WIDTH, RESIZE_HEIGHT))
+        out_path = os.path.join(OUTPUT_FOLDER, img_path.name)
+        cv2.imwrite(out_path, resized)
+        print(f"Saved: {out_path}")
+
+print("Images Finished")
