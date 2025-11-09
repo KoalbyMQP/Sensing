@@ -3,13 +3,14 @@
 import depthai as dai
 import cv2
 import threading
-import sys
-import time
+import os
+from datetime import datetime
 
 # Global variables for communication between threads
 current_frame = None
 save_requested = False
 saved_count = 0
+output_dir = "captured_images"
 
 def input_handler():
     """Handle terminal input in a separate thread"""
@@ -23,7 +24,10 @@ def input_handler():
             break
 
 def main():
-    global current_frame, save_requested, saved_count
+    global current_frame, save_requested, saved_count, output_dir
+    
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
     
     # Create device
     device = dai.Device()
@@ -40,6 +44,7 @@ def main():
         pipeline.start()
         
         print("OAK-D Lite Dataset Capture")
+        print(f"Images will be saved to: {os.path.abspath(output_dir)}")
         print("Live view running... type anything and press Enter to capture an image!")
         print("Press 'q' in the video window to quit")
         
@@ -55,6 +60,21 @@ def main():
             frame_count += 1
             current_frame = frame  # Store current frame for saving
             
+            # Check if save was requested
+            if save_requested and current_frame is not None:
+                # Generate filename with timestamp
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]  # microseconds truncated to milliseconds
+                filename = f"image_{timestamp}.jpg"
+                filepath = os.path.join(output_dir, filename)
+                
+                # Save the image
+                cv2.imwrite(filepath, current_frame)
+                saved_count += 1
+                
+                # Reset flag and provide feedback
+                save_requested = False
+                print(f"✓ Saved image {saved_count}: {filename}")
+            
             # Show frame (no text overlay)
             cv2.imshow("OAK-D Lite Camera", frame)
             
@@ -65,7 +85,7 @@ def main():
             
         
         cv2.destroyAllWindows()
-        print("Demo ended!")
+        print(f"\nDemo ended! Total images saved: {saved_count}")
 
 if __name__ == "__main__":
     main()

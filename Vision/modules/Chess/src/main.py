@@ -13,7 +13,8 @@ def main():
     
     
     model = cv_model.Model(MODEL_PATH, device)
-    model.liveInference()
+    # predict creates its own pipeline, no need to call requestImage first
+    model.predict()
 
     return
 
