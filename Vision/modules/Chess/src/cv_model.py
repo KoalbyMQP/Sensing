@@ -1,6 +1,7 @@
 import depthai as dai
 from depthai_nodes.node import ParsingNeuralNetwork, ImgDetectionsBridge
-
+import time
+import cv2
 class Model:
 
     def __init__(self, model_path, device) -> None:
@@ -17,39 +18,57 @@ class Model:
             dai.ImgFrame.Type.BGR888i if self.platform.name == "RVC4" else dai.ImgFrame.Type.BGR888p
         )
 
-        visualizer = dai.RemoteConnection(httpPort=8082)
-
         with dai.Pipeline(self.device) as pipeline:
             cam = pipeline.create(dai.node.Camera).build()
             nn_archive = dai.NNArchive(self.model_path)
 
             # Create the neural network node
             nn_with_parser = pipeline.create(ParsingNeuralNetwork).build(
-                cam.requestOutput((640, 640), type=img_frame_type, fps=30),
+                cam.requestOutput((640, 640), type=img_frame_type, fps=30, enableUndistortion=False),
                 nn_archive,
             )
 
-            # Bridge the detections to the visualizer
-            label_encoding = {
-                k: v for k, v in enumerate(
-                    nn_archive.getConfig().model.heads[0].metadata.classes
-                )
-            }
-            bridge = pipeline.create(ImgDetectionsBridge).build(nn_with_parser.out)
-            bridge.setLabelEncoding(label_encoding)
-
-            # Configure the visualizer node
-            visualizer.addTopic("Video", nn_with_parser.passthrough, "images")
-            visualizer.addTopic("Detections", bridge.out, "detections")
+            # Create queues to get image and detections (same as predict function)
+            passthrough_queue = nn_with_parser.passthrough.createOutputQueue(maxSize=4, blocking=False)
+            detections_queue = nn_with_parser.out.createOutputQueue(maxSize=4, blocking=False)
 
             pipeline.start()
-            visualizer.registerPipeline(pipeline)
 
             while pipeline.isRunning():
-                key = visualizer.waitKey(1)
+                # Get image and detections
+                if passthrough_queue.has() and detections_queue.has():
+                    frame = passthrough_queue.get().getCvFrame()
+                    img_detections = detections_queue.get()
+                    
+                    # Get image dimensions
+                    img_height, img_width = frame.shape[:2]
+                    
+                    # Draw bounding boxes and class names for each detection
+                    for detection in img_detections.detections:
+                        # Convert normalized coordinates to pixel coordinates
+                        x1 = int(detection.xmin * img_width)
+                        y1 = int(detection.ymin * img_height)
+                        x2 = int(detection.xmax * img_width)
+                        y2 = int(detection.ymax * img_height)
+                        
+                        # Draw bounding box
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                        
+                        # Get class name
+                        class_name = detection.labelName
+                        
+                        # Draw class name label
+                        cv2.putText(frame, class_name, (x1, y1 - 10), 
+                                  cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                    
+                    # Display frame with center dots
+                    cv2.imshow("Chess Detection", frame)
+                
+                key = cv2.waitKey(1) & 0xFF
                 if key == ord("q"):
-                    print("Got q key from the remote connection!")
                     break
+            
+            cv2.destroyAllWindows()
         return
 
     def requestImage(self, size: tuple[int, int]) -> dai.ImgFrame:
@@ -105,6 +124,10 @@ class Model:
         Returns:
             List of tuples: [(class_name, (center_x, center_y)), ...]
         """
+
+        resize_factor_x = 2104/640
+        resize_factor_y = 1560/640
+
         results = []
         for detection in img_detections.detections:
             class_name = detection.labelName
@@ -113,11 +136,13 @@ class Model:
                 detection.xmax, detection.ymax,
                 img_width, img_height
             )
+            center_x *= resize_factor_x
+            center_y *= resize_factor_y
             results.append((class_name, (center_x, center_y)))
         return results
 
     
-    def predict(self, imgFrame: dai.ImgFrame = None) -> list[tuple[str, tuple[int, int]]]:
+    def predict(self, distortion: bool) -> list[tuple[str, tuple[int, int]]]:
         """
         Run inference on a frame and print raw predictions.
         Creates its own pipeline to capture a frame and run inference.       
@@ -139,12 +164,19 @@ class Model:
             
             # Load model archive
             nn_archive = dai.NNArchive(self.model_path)
-            
+
             # Create the neural network node with parser (following example pattern)
-            nn_with_parser = pipeline.create(ParsingNeuralNetwork).build(
-                cam.requestOutput((640, 640), type=img_frame_type, fps=30),
-                nn_archive,
-            )
+
+            if distortion:
+                nn_with_parser = pipeline.create(ParsingNeuralNetwork).build(
+                    cam.requestOutput((640, 640), resizeMode=dai.ImgResizeMode.STRETCH, type=img_frame_type, fps=30, enableUndistortion=False),
+                    nn_archive,
+                )
+            else:
+                nn_with_parser = pipeline.create(ParsingNeuralNetwork).build(
+                    cam.requestOutput((640, 640), resizeMode=dai.ImgResizeMode.STRETCH, type=img_frame_type, fps=30, enableUndistortion=True),
+                    nn_archive,
+                )
             
             # Create output queue to get raw predictions from nn_with_parser.out
             # This is the parsed detections output (as shown in Luxonis example where
@@ -154,13 +186,15 @@ class Model:
             # Start the pipeline
             pipeline.start()
             
-            # Wait for and get the neural network output (blocking call)
+            
+            # Skip first 10 frames to flush queue and ensure stable detections
+            for _ in range(20):
+                nn_output_queue.get()
+            
+            # Get the neural network output (blocking call)
             img_detections = nn_output_queue.get()
             
-            # Print the raw predictions
-            print("Raw predictions from model:")
-            print(img_detections)
-            print(f"Output type: {type(img_detections)}")
+
             
             # Process detections to get class names and center coordinates
             # Image size is 640x640 based on the requestOutput call

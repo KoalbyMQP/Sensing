@@ -6,6 +6,7 @@ import time
 import numpy as np
 
 with dai.Pipeline() as pipeline:
+    
     hostCamera = pipeline.create(dai.node.Camera).build()
     aprilTagNode = pipeline.create(dai.node.AprilTag)
     #Max Resolution is 4208x3120
