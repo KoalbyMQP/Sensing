@@ -13,8 +13,6 @@ dependencies = [
     "depthai-nodes",
 ]
 
-[tool.setuptools.packages]
-find = {}
-
-[tool.setuptools.package-dir]
-"sensing_chess" = "src"
+[tool.setuptools]
+packages = ["sensing_chess"]
+package-dir = { "sensing_chess" = "src" }
