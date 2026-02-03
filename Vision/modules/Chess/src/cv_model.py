@@ -1,5 +1,6 @@
 import depthai as dai
 from depthai_nodes.node import ParsingNeuralNetwork, ImgDetectionsBridge
+from ultralytics import YOLO
 import time
 import cv2
 class Model:
@@ -207,3 +208,61 @@ class Model:
                 print(f"  {class_name}: center at ({center_x}, {center_y})")
         
         return results
+
+    def predict2(self, yolov8_model_path: str, distortion: bool) -> list[tuple[str, tuple[int, int]]]:
+        """
+        Run YOLOv8 inference on Raspberry Pi for a single frame from OAK-D camera.
+        Very simple - just get one image, run YOLO, get centers with rescale.
+        """
+        
+        # Load YOLO model
+        print(f"Loading YOLO model from {yolov8_model_path}...")
+        yolo_model = YOLO(yolov8_model_path)
+        print("YOLO model loaded!")
+        
+        # Get one frame from OAK-D camera
+        with dai.Pipeline(self.device) as pipeline:
+            cam = pipeline.create(dai.node.Camera).build(dai.CameraBoardSocket.RGB)
+            outputQueue = cam.requestFullResolutionOutput().createOutputQueue()
+            pipeline.start()
+            
+            # Get one frame
+            videoIn = outputQueue.get()
+            frame = videoIn.getCvFrame()
+        
+        # Run YOLOv8 inference
+        results = yolo_model.predict(frame, conf=0.25, verbose=False)
+        result = results[0]
+        
+        # Get image dimensions
+        img_height, img_width = frame.shape[:2]
+        
+        # Same rescale factors as process_detections
+        resize_factor_x = 1
+        resize_factor_y = 1
+        
+        # Process detections (same logic as process_detections)
+        detections = []
+        for box in result.boxes:
+            # Get class name
+            class_id = int(box.cls[0])
+            class_name = yolo_model.names[class_id]
+            
+            # Get normalized bbox coordinates
+            xmin, ymin, xmax, ymax = box.xyxyn[0].tolist()
+            
+            # Get center (same as get_bbox_center)
+            center_x, center_y = self.get_bbox_center(xmin, ymin, xmax, ymax, img_width, img_height)
+            
+            # Apply rescale factors (same as process_detections)
+            center_x *= resize_factor_x
+            center_y *= resize_factor_y
+            
+            detections.append((class_name, (int(center_x), int(center_y))))
+        
+        # Print processed results (same as predict)
+        print(f"\nFound {len(detections)} detections:")
+        for class_name, (center_x, center_y) in detections:
+            print(f"  {class_name}: center at ({center_x}, {center_y})")
+        
+        return detections

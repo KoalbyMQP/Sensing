@@ -93,7 +93,11 @@ def main():
 
     MODEL_PATH = (
     "/Users/azieldawit/Desktop/School/WPI/MQP/Sensing/Vision/modules/Chess/models/snake_version_1/snake_yolov8n_1.rvc2.tar.xz"
-    )   
+    )
+    
+    YOLOV8_MODEL_PATH = (
+    "/home/chess/Desktop/Sensing/Vision/modules/Chess/models/yolov11m_snake_final.pt"
+    )
     
     # First device for calibration
     device1 = dai.Device()
@@ -112,7 +116,7 @@ def main():
     print("Created device3 for prediction")
     model = cv_model.Model(MODEL_PATH, device3)
     # model.liveInference()
-    chess_peices = model.predict(distortion=True)
+    chess_peices = model.predict2(YOLOV8_MODEL_PATH, distortion=True)
 
     device3.close()
     print("Closed device3")
