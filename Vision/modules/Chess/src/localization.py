@@ -217,14 +217,14 @@ class Localize:
                 distance = (distance_squared ** 0.5)  # Calculate actual distance for printing
                 
                 # Print every distance calculation
-                print(f"  Distance to {square_name} ({square_center[0]}, {square_center[1]}): {distance:.2f}")
+                #print(f"  Distance to {square_name} ({square_center[0]}, {square_center[1]}): {distance:.2f}")
                 
                 # Track the closest square
                 if distance_squared < min_distance:
                     min_distance = distance_squared
                     closest_square = square_name
             
-            print(f"  -> Closest square: {closest_square} (distance: {(min_distance ** 0.5):.2f})")
+            #print(f"  -> Closest square: {closest_square} (distance: {(min_distance ** 0.5):.2f})")
             
             # Assign the class name to the closest square
             if closest_square is not None:

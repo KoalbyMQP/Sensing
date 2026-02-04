@@ -261,8 +261,8 @@ class Model:
             detections.append((class_name, (int(center_x), int(center_y))))
         
         # Print processed results (same as predict)
-        print(f"\nFound {len(detections)} detections:")
-        for class_name, (center_x, center_y) in detections:
-            print(f"  {class_name}: center at ({center_x}, {center_y})")
+        # print(f"\nFound {len(detections)} detections:")
+        # for class_name, (center_x, center_y) in detections:
+        #     print(f"  {class_name}: center at ({center_x}, {center_y})")
         
         return detections
