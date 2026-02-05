@@ -204,7 +204,7 @@ class Localize:
         
         # For each detected chess piece, find the closest square
         for class_name, piece_center in chess_peices:
-            print(f"\n{class_name} at ({piece_center[0]}, {piece_center[1]})")
+            #print(f"\n{class_name} at ({piece_center[0]}, {piece_center[1]})")
             min_distance = float('inf')
             closest_square = None
             
