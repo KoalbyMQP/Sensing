@@ -226,7 +226,10 @@ class Model:
             outputQueue = cam.requestFullResolutionOutput().createOutputQueue()
             pipeline.start()
             
-            # Get one frame
+            # Skip first 4 frames (use 5th frame) — first frames are unreliable on OAK-D Lite
+            for _ in range(4):
+                outputQueue.get()
+            # Get the 5th frame for inference
             videoIn = outputQueue.get()
             frame = videoIn.getCvFrame()
         
