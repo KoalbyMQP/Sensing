@@ -203,9 +203,9 @@ class Model:
             results = self.process_detections(img_detections, img_width, img_height)
             
             # Print processed results
-            print(f"\nFound {len(results)} detections:")
-            for class_name, (center_x, center_y) in results:
-                print(f"  {class_name}: center at ({center_x}, {center_y})")
+            #print(f"\nFound {len(results)} detections:")
+            #for class_name, (center_x, center_y) in results:
+                #print(f"  {class_name}: center at ({center_x}, {center_y})")
         
         return results
 
