@@ -178,6 +178,11 @@ class Localize:
                         
                         chess_squares[square_name] = intersection
 
+        sideways = True  # Fix this to be a sentinel variable
+        if sideways:
+            rotated = list(zip(*chess_squares[::-1]))
+            rotated = [list(row) for row in rotated]
+            chess_squares = rotated
         return chess_squares
 
     
@@ -204,7 +209,7 @@ class Localize:
         
         # For each detected chess piece, find the closest square
         for class_name, piece_center in chess_peices:
-            print(f"\n{class_name} at ({piece_center[0]}, {piece_center[1]})")
+            #print(f"\n{class_name} at ({piece_center[0]}, {piece_center[1]})")
             min_distance = float('inf')
             closest_square = None
             
