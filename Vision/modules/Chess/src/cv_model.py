@@ -203,9 +203,9 @@ class Model:
             results = self.process_detections(img_detections, img_width, img_height)
             
             # Print processed results
-            print(f"\nFound {len(results)} detections:")
-            for class_name, (center_x, center_y) in results:
-                print(f"  {class_name}: center at ({center_x}, {center_y})")
+            #print(f"\nFound {len(results)} detections:")
+            #for class_name, (center_x, center_y) in results:
+                #print(f"  {class_name}: center at ({center_x}, {center_y})")
         
         return results
 
@@ -226,7 +226,10 @@ class Model:
             outputQueue = cam.requestFullResolutionOutput().createOutputQueue()
             pipeline.start()
             
-            # Get one frame
+            # Skip first 4 frames (use 5th frame) — first frames are unreliable on OAK-D Lite
+            for _ in range(4):
+                outputQueue.get()
+            # Get the 5th frame for inference
             videoIn = outputQueue.get()
             frame = videoIn.getCvFrame()
         
