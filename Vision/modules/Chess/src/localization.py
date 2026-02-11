@@ -234,6 +234,13 @@ class Localize:
             # Assign the class name to the closest square
             if closest_square is not None:
                 full_board[closest_square] = class_name
+
+            sideways = True
+            # This method rotates the board 90 degrees (pi/2 radians) clockwise for the camera on the side of the board
+            if sideways:
+                rotated = list(zip(*full_board[::-1]))
+                rotated = [list(row) for row in rotated]
+                full_board = rotated
         
         return full_board 
 
