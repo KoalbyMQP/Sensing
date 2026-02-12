@@ -172,17 +172,19 @@ class Localize:
 
                         # Map to chess notation: A-H (columns), 1-8 (rows)
                         # Note: row 0 is top (row 8 in chess), row 7 is bottom (row 1 in chess)
-                        chess_col = chr(ord('A') + col_idx)
-                        chess_row = 8 - row_idx  # Flip row numbering
+                        # chess_col = chr(ord('A') + col_idx)
+                        # chess_row = 8 - row_idx  # Flip row numbering
+                        chess_col = chr(ord('H') - row_idx)
+                        chess_row = 8 - col_idx
                         square_name = f"{chess_col}{chess_row}"
-                        
+                        print(f"square_name: {square_name}")
                         chess_squares[square_name] = intersection
 
-        sideways = True  # Fix this to be a sentinel variable
-        if sideways:
-            rotated = list(zip(*chess_squares[::-1]))
-            rotated = [list(row) for row in rotated]
-            chess_squares = rotated
+        # sideways = True  # Fix this to be a sentinel variable
+        # if sideways:
+        #     rotated = list(zip(*chess_squares[::-1]))
+        #     rotated = [list(row) for row in rotated]
+        #     chess_squares = rotated
         return chess_squares
 
     
@@ -237,10 +239,10 @@ class Localize:
 
             sideways = True
             # This method rotates the board 90 degrees (pi/2 radians) clockwise for the camera on the side of the board
-            if sideways:
-                rotated = list(zip(*full_board[::-1]))
-                rotated = [list(row) for row in rotated]
-                full_board = rotated
+            # if sideways:
+            #     rotated = list(zip(*full_board[::-1]))
+            #     rotated = [list(row) for row in rotated]
+            #     full_board = rotated
         
         return full_board 
 
