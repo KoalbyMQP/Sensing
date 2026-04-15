@@ -174,8 +174,8 @@ class Localize:
                         # Note: row 0 is top (row 8 in chess), row 7 is bottom (row 1 in chess)
                         # chess_col = chr(ord('A') + col_idx)
                         # chess_row = 8 - row_idx  # Flip row numbering
-                        chess_col = chr(ord('H') - row_idx)
-                        chess_row = 8 - col_idx
+                        chess_col = chr(ord('A') + col_idx)
+                        chess_row = 8 - row_idx
                         square_name = f"{chess_col}{chess_row}"
                         print(f"square_name: {square_name}")
                         chess_squares[square_name] = intersection
